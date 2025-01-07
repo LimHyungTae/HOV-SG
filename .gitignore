@@ -9,3 +9,4 @@ __pycache__/
 /data/scene_graphs
 /outputs
 checkpoints/
+.venv/
