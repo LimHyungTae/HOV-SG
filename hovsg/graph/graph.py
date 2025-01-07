@@ -170,6 +170,7 @@ class Graph:
         # extract features for each frame
         frames_pcd = []
         frames_feats = []
+        total_time = 0
         for i in tqdm(range(0, len(self.dataset), self.cfg.pipeline.skip_frames), desc="Extracting features"):
             rgb_image, depth_image, pose, _, _ = self.dataset[i]
             if rgb_image.size != depth_image.size:
@@ -185,6 +186,7 @@ class Graph:
             )
             F_2D = F_2D.cpu()
             pcd = self.dataset.create_pcd(rgb_image, depth_image, pose)
+            start_mask = time.perf_counter()
             masks_3d = self.dataset.create_3d_masks(
                 masks,
                 depth_image,
@@ -204,6 +206,10 @@ class Graph:
             dis, idx = tree_pcd.query(np.asarray(pcd.points), k=1, workers=-1)
             sum_features[idx] += F_2D
             counter[idx] += 1
+            end_mask = time.perf_counter()  # End timing
+            elapsed_time = end_mask - start_mask
+            total_time += elapsed_time
+
         # compute the average features
         counter[counter == 0] = 1e-5
         sum_features = sum_features / counter
@@ -240,6 +246,7 @@ class Graph:
         len_final = len(self.mask_pcds)
         elapsed_merge = (end_merge - start) * 1000 
         elapsed_pop = (end_pop - end_merge) * 1000 
+        print(f"Elapsed time for masking: {total_time * 1000:.3f} ms")
         print(f"Elapsed time for merging: {elapsed_merge:.3f} ms")
         print(f"Elapsed time for pop: {elapsed_pop:.3f} ms")
 
