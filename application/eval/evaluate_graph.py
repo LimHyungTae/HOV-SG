@@ -63,7 +63,7 @@ def main(params: DictConfig):
     evaluator = HM3DSemanticEvaluator(params)
     evaluator.load_gt_graph_from_json(os.path.join(dataset_path, "scene_info.json"))
 
-    save_dir = os.path.join(params.main.save_path, params.main.dataset, params.main.split, params.main.scene_id)
+    save_dir = os.path.join(params.main.save_path, params.main.scene_id, params.main.dataset, params.main.scene_id)
 
     hovsg = Graph(params)
 

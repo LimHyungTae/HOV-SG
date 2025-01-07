@@ -61,7 +61,7 @@ from hovsg.utils.llm_utils import (
 )
 
 # pylint: disable=all
-
+import time
 
 class Graph:
     """
@@ -210,6 +210,7 @@ class Graph:
         self.full_feats_array = sum_features.cpu().numpy()
         self.full_feats_array: np.ndarray
 
+        start = time.perf_counter()
         # merging the masks
         if self.cfg.pipeline.merge_type == "hierarchical":
             tqdm.write("Merging 3d masks hierarchically")
@@ -228,11 +229,21 @@ class Graph:
                 self.cfg.pipeline.voxel_size, 
                 self.cfg.pipeline.iou_thresh
             )
-
-        # remove any small pcds
+        end_merge = time.perf_counter()
+                # remove any small pcds
+        len_original = len(self.mask_pcds)
         for i, pcd in enumerate(self.mask_pcds):
             if pcd.is_empty() or len(pcd.points) < 100:
                 self.mask_pcds.pop(i)
+        end_pop = time.perf_counter()
+
+        len_final = len(self.mask_pcds)
+        elapsed_merge = (end_merge - start) * 1000 
+        elapsed_pop = (end_pop - end_merge) * 1000 
+        print(f"Elapsed time for merging: {elapsed_merge:.3f} ms")
+        print(f"Elapsed time for pop: {elapsed_pop:.3f} ms")
+
+        print(len_original, " ===> ", len_final)
         # fuse point features in every 3d mask
         masks_feats = []
         for i, mask_3d in tqdm(enumerate(self.mask_pcds), desc="Fusing features"):

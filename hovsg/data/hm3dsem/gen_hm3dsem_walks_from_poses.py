@@ -34,16 +34,16 @@ def main():
     args = parser.parse_args()
     split = args.split
     all_scene_names = [
-        "00824-Dd4bFSTQ8gi",
-        "00829-QaLdnwvtxbs",
-        "00843-DYehNKdT76V",
-        "00847-bCPU9suPUw9",
-        "00849-a8BtkwhxdRV",
-        "00861-GLAQ4DNUx5U",
-        "00862-LT9Jq6dN3Ea",
-        "00873-bxsVRursffK",
-        "00877-4ok3usBNeis",
-        "00890-6s7QHgap2fW",
+        # "00824-Dd4bFSTQ8gi",
+        # "00829-QaLdnwvtxbs",
+        # "00843-DYehNKdT76V",
+        # "00847-bCPU9suPUw9",
+        # "00849-a8BtkwhxdRV",
+        # "00861-GLAQ4DNUx5U",
+        # "00862-LT9Jq6dN3Ea",
+        # "00873-bxsVRursffK",
+        # "00877-4ok3usBNeis",
+        "00890-6s7QHgap2fW"
     ]
     root_dataset_dir = args.dataset_dir
     root_save_dir = args.save_dir
@@ -139,6 +139,7 @@ def main():
             save_obs(save_dir, sim_settings, obs, pose, steps)
             steps += 1
 
+    print("Done!")
 
 if __name__ == "__main__":
     main()

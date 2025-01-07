@@ -3,10 +3,10 @@ main:
   dataset: hm3dsem
   scene_id: 00824-Dd4bFSTQ8gi # scene0011_00
   split: val
-  package_path: /home/SOME_USERNAME/HOV-SG/hovsg/
-  dataset_path: /home/SOME_USERNAME/data/hm3dsem_walks/
-  raw_data_path: /data/hovsg/hm3dsem/data/versioned_data/hm3d-0.2/hm3d
-  save_path: /home/SOME_USERNAME/data/hovsg/
+  package_path: /home/shapelim/git/HOV-SG/hovsg/
+  dataset_path: /home/shapelim/git/HOV-SG/hovsg/data/hm3dsem_walks/
+  raw_data_path: /media/shapelim/Extreme_SSD/hm3d
+  save_path: /home/shapelim/git/HOV-SG/hovsg/data/scene_graphs/
 dataset:
   hm3dsem:
     gt_skip_frames: 1
@@ -25,7 +25,7 @@ models:
     stability_score_thresh: 0.95
     min_mask_region_area: 100
 eval:
-  association_metric: overlap
+  association_metric: iou
   obj_labels: HM3DSEM_LABELS
   hm3dsem:
     top_k_object_semantic_eval: [5, 10, 25, 100, 250, 500]

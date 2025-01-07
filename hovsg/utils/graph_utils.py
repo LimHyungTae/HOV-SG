@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from torchmetrics.functional import pairwise_cosine_similarity
 from tqdm import tqdm
 
+import small_gicp
 import open3d as o3d
 
 
@@ -372,6 +373,54 @@ def find_overlapping_ratio_faiss(pcd1, pcd2, radius=0.02):
 
     return overlapping_ratio
 
+def find_overlapping_ratio_small_gicp(pcd1, pcd2, radius=0.02):
+    """
+    Calculate the percentage of overlapping points between two point clouds using small-GICP KD-Tree.
+
+    Parameters:
+    pcd1 (numpy.ndarray): Point cloud 1, shape (n1, 3).
+    pcd2 (numpy.ndarray): Point cloud 2, shape (n2, 3).
+    radius (float): Radius for KD-Tree query (adjust based on point density).
+
+    Returns:
+    float: Overlapping ratio between 0 and 1.
+    """
+    if type(pcd1) == o3d.geometry.PointCloud and type(pcd2) == o3d.geometry.PointCloud:
+        pcd1 = np.asarray(pcd1.points)
+        pcd2 = np.asarray(pcd2.points)
+
+    if pcd1.shape[0] == 0 or pcd2.shape[0] == 0:
+        return 0
+
+    # Convert numpy arrays to small_gicp.PointCloud
+    pcd1_cloud = small_gicp.PointCloud(pcd1)
+    pcd2_cloud = small_gicp.PointCloud(pcd2)
+
+    # Build KD-Trees for each point cloud
+    pcd1_tree = small_gicp.KdTree(pcd1_cloud)
+    pcd2_tree = small_gicp.KdTree(pcd2_cloud)
+
+    # Count overlapping points for pcd1 against pcd2
+    overlaps1 = 0
+    for point in pcd1:
+        found, _, sq_dist = pcd2_tree.nearest_neighbor_search(point)
+        if found and sq_dist <= radius**2:
+            overlaps1 += 1
+
+    # Count overlapping points for pcd2 against pcd1
+    overlaps2 = 0
+    for point in pcd2:
+        found, _, sq_dist = pcd1_tree.nearest_neighbor_search(point)
+        if found and sq_dist <= radius**2:
+            overlaps2 += 1
+
+    # Compute the overlapping ratio
+    ratio1 = overlaps1 / pcd1.shape[0]
+    ratio2 = overlaps2 / pcd2.shape[0]
+    overlapping_ratio = max(ratio1, ratio2)
+
+    return overlapping_ratio
+
 def merge_point_clouds_list(pcd_list, voxel_size=0.02):
     """
         Merge a list of point clouds into a single point cloud.
@@ -530,7 +579,7 @@ def merge_3d_masks(mask_list, overlap_threshold=0.5, radius=0.02, iou_thresh=0.0
     for i in range(len(mask_list)):
         for j in range(i + 1, len(mask_list)):
             if compute_3d_bbox_iou(aa_bb[i], aa_bb[j]) > iou_thresh:
-                overlap_matrix[i, j] = find_overlapping_ratio_faiss(mask_list[i], mask_list[j], radius=1.5 * radius)
+                overlap_matrix[i, j] = find_overlapping_ratio_small_gicp(mask_list[i], mask_list[j], radius=1.5 * radius)
 
     # check if overlap_matrix is zero size
     if overlap_matrix.shape[0] == 0:
@@ -597,6 +646,9 @@ def hierarchical_merge(frames_pcd, th, th_factor, down_size, proxy_th):
     return frames_pcd
 
 
+def gp(text):
+    print("\033[1;32m", text, "\033[0m")
+
 def seq_merge(frames_pcd, th, down_size, proxy_th):
     """
         Merge the frames in the list of frames sequentially
@@ -608,8 +660,11 @@ def seq_merge(frames_pcd, th, down_size, proxy_th):
     """
 
     global_masks = frames_pcd[0]
+    gp(type(global_masks))
     for i in tqdm(range(1, len(frames_pcd))):
         mask_list = global_masks + frames_pcd[i]
+        gp(type(mask_list))
+        gp(len(mask_list))
         merged_mask_list = merge_3d_masks(
             mask_list,
             overlap_threshold=th,
