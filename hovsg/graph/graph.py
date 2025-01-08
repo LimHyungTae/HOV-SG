@@ -139,6 +139,31 @@ class Graph:
             print("Dataset not supported")
             return
 
+    def create_pcd_map(self, save_path=None):
+        if self.dataset is None:
+            print("No dataset loaded")
+            return
+        
+        if save_path and os.path.exists(save_path):
+            print(f"Loading existing point cloud from {save_path}")
+            self.full_pcd = o3d.io.read_point_cloud(save_path)
+            return
+
+        # create the RGB-D point cloud
+        for i in tqdm(range(0, len(self.dataset), self.cfg.pipeline.skip_frames), desc="Creating RGB-D point cloud"):
+            rgb_image, depth_image, pose, _, depth_intrinsics = self.dataset[i]
+            self.full_pcd += self.dataset.create_pcd(rgb_image, depth_image, pose)
+
+        # filter point cloud
+        self.full_pcd = self.full_pcd.voxel_down_sample(
+            voxel_size=self.cfg.pipeline.voxel_size
+        )
+        self.full_pcd = pcd_denoise_dbscan(self.full_pcd, eps=0.01, min_points=100)
+
+        if save_path:
+            print(f"Saving point cloud to {save_path}")
+            o3d.io.write_point_cloud(save_path, self.full_pcd)
+
     def create_feature_map(self, save_path=None):
         """
         Create the feature map of the HOV-SG (full point cloud + feature map point level + feature map mask level)
