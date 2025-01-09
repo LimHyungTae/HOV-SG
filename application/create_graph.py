@@ -19,6 +19,10 @@ def main(params: DictConfig):
     hovsg = Graph(params)
     hovsg.create_feature_map() # create feature map
 
+    # # # # # # # # # # # # # # # # # # # # # 
+    # This line is only for debugging!!! 
+    hovsg.save_heatmap_masks(save_dir, 5)
+    # # # # # # # # # # # # # # # # # # # # # 
     # save full point cloud, features, and masked point clouds (pcd for all objects)
     hovsg.save_masked_pcds(path=save_dir, state="both")
     hovsg.save_full_pcd(path=save_dir)

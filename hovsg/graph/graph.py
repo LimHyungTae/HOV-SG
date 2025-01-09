@@ -1424,6 +1424,125 @@ class Graph:
         print("number of objects: ", len(self.objects))
         return None
 
+    def get_jet_color(self, value, max_value=1.0, min_value=0.0):
+        """
+        Map a value in the range [0, 1] to a JET colormap color.
+
+        Args:
+            value: Float between 0 and 1.
+
+        Returns:
+            (B, G, R): Color tuple for the JET colormap.
+        """
+        # Clamp the value between 0 and 1
+        value = np.clip(value, 0, 1)
+
+        # Define JET colormap logic
+        diff = max_value - min_value
+        if value < min_value + diff / 4:
+            r = 0
+            g = int(4 * 255 * value)
+            b = 255
+        elif value < min_value + diff / 2:
+            r = 0
+            g = 255
+            b = int(255 - 4 * 255 * (value - 0.25))
+        elif value < min_value + diff * 3 / 4:
+            r = int(4 * 255 * (value - 0.5))
+            g = 255
+            b = 0
+        else:
+            r = 255
+            g = int(255 - 4 * 255 * (value - 0.75))
+            b = 0
+
+        return (b, g, r)  # Return as BGR for OpenCV
+
+    def save_heatmap_masks(self, path, num_top_N):
+        """
+        Save the heatmap-colored masks to delve into how to enhance the performance
+        """
+        if not os.path.exists(path):
+            os.makedirs(path)
+        img_path = os.path.join(path, "debug_imgs")
+
+        if os.path.exists(img_path):
+            import shutil
+            shutil.rmtree(img_path)
+        os.makedirs(img_path)
+
+        # remove any small pcds
+        tqdm.write("-- removing small and empty masks --")
+        for i, pcd in enumerate(self.mask_pcds):
+            if len(pcd.points) < 50:
+                self.mask_pcds.pop(i)
+                self.mask_feats.pop(i)
+
+        for i, pcd in enumerate(self.mask_pcds):
+            if pcd.is_empty():
+                self.mask_pcds.pop(i)
+                self.mask_feats.pop(i)
+
+        frames = []
+        count = 0
+        for i in tqdm(range(0, len(self.dataset), self.cfg.pipeline.skip_frames), desc="Creating RGB-D point cloud"):
+            rgb_image, _, _, _, _ = self.dataset[i]
+            LOAD_IMG_HEIGHT, LOAD_IMG_WIDTH = np.array(rgb_image).shape[0], np.array(rgb_image).shape[1]
+            frames.append(rgb_image)
+            debug_img = np.array(rgb_image.copy())
+            bbox_image = draw_all_bounding_boxs(debug_img, self.frames_masks[count])
+
+            output_path = os.path.join(img_path, f"debug_{count}.png")
+            cv2.imwrite(output_path, bbox_image)
+            count += 1
+
+        cos = torch.nn.CosineSimilarity(dim=-1, eps=1e-6)
+        for obj_id, mask_feat in enumerate(self.mask_feats):
+            candidates_indices = []
+            candidates_similarities = []
+            for frame_idx, feats_in_frame in enumerate(self.frames_feats):
+                print(mask_feat.shape)
+                print(feats_in_frame.shape)
+                similarities = cos(torch.from_numpy(mask_feat), feats_in_frame)
+                print(similarities)
+
+                top1_idx = torch.argmax(similarities).item()  
+                top1_similarity = similarities[top1_idx].item()
+                
+                candidates_indices.append((frame_idx, top1_idx)) 
+                candidates_similarities.append(top1_similarity)
+
+            print("\033[1;32m", candidates_indices)
+            print("\033[1;32m", candidates_similarities)
+            top_N_indices = np.argsort(candidates_similarities)[-num_top_N:][::-1]  
+            print(top_N_indices, "\033[0m")
+            top_N_candidates = [(candidates_indices[i], candidates_similarities[i]) for i in top_N_indices]
+            similarities = [sim for _, ((frame_idx, cand_idx), sim) in enumerate(top_N_candidates)]
+            max_sim = max(similarities)
+            min_sim = min(similarities)
+                    
+            for rank, ((frame_idx, cand_idx), similarity) in enumerate(top_N_candidates):
+                # Get mask and frame
+                mask = self.frames_masks[frame_idx][cand_idx] 
+                frame = np.array(frames[frame_idx]).copy()  
+
+                m_tmp = mask["segmentation"]
+                x, y, w, h = increase_bbox_by_margin(mask["bbox"], 0)
+                x, y, w, h = int(x), int(y), int(w), int(h)
+
+                heatmap_color = self.get_jet_color(similarity, max_sim, min_sim)
+                cv2.rectangle(frame, (x, y), (x + w, y + h), heatmap_color, 2)
+                # Get bounding box coordinates
+                text = f"{similarity:.3f}"
+                text_x = x
+                text_y = max(y - 10, 10)
+                cv2.putText(frame, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+                # Save image
+                print("Saving", os.path.join(img_path, f"{obj_id}_rank_{rank}_{frame_idx}_{cand_idx}.png")) 
+                output_path = os.path.join(img_path, f"{obj_id}_rank_{rank}_{frame_idx}_{cand_idx}.png")
+                cv2.imwrite(output_path, frame)
+
     def save_masked_pcds(self, path, state="both"):
         """
         Save the masked pcds to disk
