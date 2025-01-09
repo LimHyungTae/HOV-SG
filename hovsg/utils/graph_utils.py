@@ -7,6 +7,7 @@ import cv2
 
 import faiss
 import matplotlib.pyplot as plt
+import scienceplots
 import matplotlib.cm as cm
 import numpy as np
 import open3d as o3d
@@ -21,6 +22,8 @@ from tqdm import tqdm
 import small_gicp
 import open3d as o3d
 
+# It needs `scienceplots`
+plt.style.use(['science','ieee'])
 
 def find_intersection_share(map_points, obj_points, radius=0.05):
     """
@@ -141,6 +144,7 @@ def compute_room_embeddings(
             closest_cam_pose_idx = np.argmin(np.array(closest_cam_pose))
             room_id2img_id[room_id].append(closest_cam_pose_idx)
 
+    plt.gca().invert_xaxis()
     plt.savefig(os.path.join(save_path, "pcd_camera_pose.png"))
 
     repr_img_ids_list = []
@@ -236,6 +240,7 @@ def distance_transform(occupancy_map, reselotion, tmp_path):
     cv2.normalize(dist, dist, 0, 255, cv2.NORM_MINMAX)
     plt.figure()
     plt.imshow(dist, cmap="jet", origin="lower")
+    plt.gca().invert_xaxis()
     plt.savefig(os.path.join(tmp_path, "dist.png"))
 
     dist = np.uint8(dist)
@@ -243,10 +248,12 @@ def distance_transform(occupancy_map, reselotion, tmp_path):
     blur = cv2.GaussianBlur(dist, (11, 1), 10)
     plt.figure()
     plt.imshow(blur, cmap="jet", origin="lower")
+    plt.gca().invert_xaxis()
     plt.savefig(os.path.join(tmp_path, "dist_blur.png"))
     _, dist = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     plt.figure()
     plt.imshow(dist, cmap="jet", origin="lower")
+    plt.gca().invert_xaxis()
     plt.savefig(os.path.join(tmp_path, "dist_thresh.png"))
 
     # Create the CV_8U version of the distance image
@@ -265,7 +272,7 @@ def distance_transform(occupancy_map, reselotion, tmp_path):
     min_area = (min_area_m / reselotion) ** 2
     print("min_area: ", min_area)
     contours = [c for c in contours if cv2.contourArea(c) > min_area]
-    print("number of contours after remove small seeds: ", len(contours))
+    print("\033[1;33mnumber of contours after remove small seeds: ", len(contours), "\033[0m")
 
     # Create the marker image for the watershed algorithm
     markers = np.zeros(dist.shape, dtype=np.int32)
@@ -282,6 +289,7 @@ def distance_transform(occupancy_map, reselotion, tmp_path):
 
     plt.figure()
     plt.imshow(markers, cmap="jet", origin="lower")
+    plt.gca().invert_xaxis()
     plt.savefig(os.path.join(tmp_path, "markers.png"))
 
     # find the vertices of each room

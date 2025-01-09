@@ -13,6 +13,7 @@ import numpy as np
 import open3d as o3d
 
 import matplotlib.pyplot as plt
+import scienceplots
 
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
@@ -38,7 +39,7 @@ from hovsg.dataloader.hm3dsem import HM3DSemDataset
 from hovsg.dataloader.scannet import ScannetDataset
 from hovsg.dataloader.replica import ReplicaDataset
 
-from hovsg.utils.clip_utils import get_img_feats, get_text_feats_multiple_templates
+from hovsg.utils.clip_utils import get_img_feats, get_text_feats_multiple_templates, match_text_to_imgs
 from hovsg.models.sam_clip_feats_extractor import extract_feats_per_pixel
 from hovsg.utils.graph_utils import (
     seq_merge,
@@ -50,6 +51,7 @@ from hovsg.utils.graph_utils import (
     find_intersection_share,
     hierarchical_merge,
 )
+from hovsg.utils.sam_utils import crop_bbox, increase_bbox_by_margin, draw_all_bounding_boxs
 
 from hovsg.graph.navigation_graph import NavigationGraph
 from hovsg.utils.label_feats import get_label_feats
@@ -62,6 +64,9 @@ from hovsg.utils.llm_utils import (
 
 # pylint: disable=all
 import time
+
+# It needs `scienceplots`
+plt.style.use(['science','ieee'])
 
 class Graph:
     """
@@ -178,8 +183,6 @@ class Graph:
         if not os.path.exists(img_path):
             os.makedirs(img_path)
 
-        import matplotlib.pyplot as plt
-        import scienceplots
 
         all_scores = []
         for i in tqdm(range(0, len(self.dataset), self.cfg.pipeline.skip_frames), desc="Comparing text and images"):
@@ -213,7 +216,6 @@ class Graph:
         print("Column-wise Minimums:", column_mins)
         print("Column-wise Maximums:", column_maxs)
 
-        plt.style.use(['science','ieee'])
         for m in range(all_scores.shape[1]):  # Iterate over M (number of text queries)
             plt.figure(figsize=(12, 4))
             plt.plot(range(0, len(self.dataset), self.cfg.pipeline.skip_frames), all_scores[:, m], linestyle='-', marker='o')
@@ -521,6 +523,7 @@ class Graph:
             plt.figure()
             plt.imshow(hist, interpolation="nearest", cmap="jet", origin="lower")
             plt.colorbar()
+            plt.gca().invert_xaxis()
             plt.savefig(os.path.join(tmp_floor_path, "2D_histogram.png"))
 
         # applythresholding
@@ -570,10 +573,12 @@ class Graph:
         if self.cfg.pipeline.save_intermediate_results:
             plt.figure()
             plt.imshow(walls_skeleton, cmap="gray", origin="lower")
+            plt.gca().invert_xaxis()
             plt.savefig(os.path.join(tmp_floor_path, "walls_skeleton.png"))
 
             plt.figure()
             plt.imshow(outside_boundary, cmap="gray", origin="lower")
+            plt.gca().invert_xaxis()
             plt.savefig(os.path.join(tmp_floor_path, "outside_boundary.png"))
 
         # combine the walls skelton and outside boundary
@@ -587,6 +592,7 @@ class Graph:
             # plot the full map
             plt.figure()
             plt.imshow(full_map, cmap="gray", origin="lower")
+            plt.gca().invert_xaxis()
             plt.savefig(os.path.join(tmp_floor_path, "full_map.png"))
         # apply distance transform to the full map
         room_vertices = distance_transform(full_map, resolution, tmp_floor_path)
