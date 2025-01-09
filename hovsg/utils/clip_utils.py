@@ -43,10 +43,11 @@ def compute_plot_coordinates(image, x, y, image_centers_area_size, offset):
 
     return tl_x, tl_y, br_x, br_y
 
-def match_text_to_imgs(language_instr, images_list):
-    """img_feats: (Nxself.clip_feat_dim), text_feats: (1xself.clip_feat_dim)"""
-    imgs_feats = get_imgs_feats(images_list)
-    text_feats = get_text_feats([language_instr])
+def match_text_to_imgs(text_list, images_list, preprocess, clip_model, clip_feat_dim):
+    imgs_feats = get_imgs_feats(images_list, preprocess, clip_model, clip_feat_dim)
+    text_feats = get_text_feats(text_list, clip_model, clip_feat_dim)
+    print("img_feat_size:", imgs_feats.shape)
+    print("text_feat_size:",text_feats.shape)
     scores = imgs_feats @ text_feats.T
     scores = scores.squeeze()
     return scores, imgs_feats, text_feats

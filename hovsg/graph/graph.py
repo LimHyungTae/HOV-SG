@@ -86,6 +86,9 @@ class Graph:
         self.room_masks = {}
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        self.frames_feats = []
+        self.frames_masks = []
+
         # load CLIP model
         if self.cfg.models.clip.type == "ViT-L/14@336px":
             self.clip_model, _, self.preprocess = open_clip.create_model_and_transforms(
@@ -164,6 +167,63 @@ class Graph:
             print(f"Saving point cloud to {save_path}")
             o3d.io.write_point_cloud(save_path, self.full_pcd)
 
+    def detect_room_transition(self, path, text_prompts):
+        """
+        Detect whether an image shows a room-to-room transition using a CLIP model.
+        This function is only for debugging!
+        """
+        if not os.path.exists(path):
+            os.makedirs(path)
+        img_path = os.path.join(path, "room_detection")
+        if not os.path.exists(img_path):
+            os.makedirs(img_path)
+
+        import matplotlib.pyplot as plt
+        import scienceplots
+
+        all_scores = []
+        for i in tqdm(range(0, len(self.dataset), self.cfg.pipeline.skip_frames), desc="Comparing text and images"):
+            rgb_image, _, _, _, _ = self.dataset[i]
+            image = np.array(rgb_image)
+            scores, imgs_feat, text_feats = match_text_to_imgs(text_prompts, [image], self.preprocess, self.clip_model, self.clip_feat_dim)
+      
+            half_size = (image.shape[1] // 2, image.shape[0] // 2)  # (width, height)
+            resized_image = cv2.resize(image, half_size, interpolation=cv2.INTER_AREA)
+
+            # This part is hard-coded
+            for m in range(6):
+                cv2.putText(resized_image, f"{scores[m]:.4f}", (20, 50 + 30 * m), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+            for m in range(6, 11):
+                cv2.putText(resized_image, f"{scores[m]:.4f}", (150, 50 + 30 * (m - 6)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            for m in range(11, 16):
+                cv2.putText(resized_image, f"{scores[m]:.4f}", (280, 50 + 30 * (m - 11)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            for m in range(17, 22):
+                cv2.putText(resized_image, f"{scores[m]:.4f}", (410, 50 + 30 * (m - 17)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+
+            output_path = os.path.join(img_path, f"{i}.png")
+            print(output_path)
+            cv2.imwrite(output_path, resized_image)
+
+            all_scores.append(scores)
+
+        all_scores = np.array(all_scores)    
+
+        column_mins = np.min(all_scores, axis=0)
+        column_maxs = np.max(all_scores, axis=0)
+        print("Column-wise Minimums:", column_mins)
+        print("Column-wise Maximums:", column_maxs)
+
+        plt.style.use(['science','ieee'])
+        for m in range(all_scores.shape[1]):  # Iterate over M (number of text queries)
+            plt.figure(figsize=(12, 4))
+            plt.plot(range(0, len(self.dataset), self.cfg.pipeline.skip_frames), all_scores[:, m], linestyle='-', marker='o')
+            # Configure plot aesthetics
+            plt.xlabel('Frame Index')
+            plt.ylabel('Score Value')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(os.path.join(img_path, f"score_{m}_th_prompt_{text_prompts[m]}.png"), dpi=300, bbox_inches='tight')
+    
     def create_feature_map(self, save_path=None):
         """
         Create the feature map of the HOV-SG (full point cloud + feature map point level + feature map mask level)
@@ -194,7 +254,6 @@ class Graph:
 
         # extract features for each frame
         frames_pcd = []
-        frames_feats = []
         total_time = 0
         for i in tqdm(range(0, len(self.dataset), self.cfg.pipeline.skip_frames), desc="Extracting features"):
             rgb_image, depth_image, pose, _, _ = self.dataset[i]
@@ -222,7 +281,8 @@ class Graph:
                 filter_distance=self.cfg.pipeline.max_mask_distance,
             )
             frames_pcd.append(masks_3d)
-            frames_feats.append(F_masks)
+            self.frames_feats.append(F_masks)
+            self.frames_masks.append(masks)
             # fuse features for each point in the full pcd
             mask = np.array(depth_image) > 0
             mask = torch.from_numpy(mask)
@@ -231,7 +291,7 @@ class Graph:
             dis, idx = tree_pcd.query(np.asarray(pcd.points), k=1, workers=-1)
             sum_features[idx] += F_2D
             counter[idx] += 1
-            end_mask = time.perf_counter()  # End timing
+            end_mask = time.perf_counter()  
             elapsed_time = end_mask - start_mask
             total_time += elapsed_time
 
